@@ -1,0 +1,21 @@
+{
+	"Log": {
+		"File": "log/gokvstore.log",
+		"Level": "debug",
+		"Name": "gokvstore",
+		"Suffix": "060102-15"
+	},
+	
+	"Prog": {
+		"CPU": 0,
+		"Daemon": false,
+		"HealthPort": "localhost:6060"
+	},
+	
+	"Server": {
+		"Redis": "tcp://10.133.157.137:6379/0?timeout=60s&maxidle=10",
+		"Mysql":"mysql://root:@tcp(10.133.157.137:3306)/mae",
+		"PortInfo":"0.0.0.0:9090"
+	}
+}
+

@@ -1,0 +1,8 @@
+CREATE DATABASE IF NOT EXISTS MAE DEFAULT CHARSET utf8 COLLATE utf8_general_ci;
+
+DROP TABLE IF EXISTS `testtable`;
+CREATE TABLE `testtable` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `name` varchar(64) NOT NULL DEFAULT '',
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
