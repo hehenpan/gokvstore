@@ -15,7 +15,11 @@
 	"Server": {
 		"Redis": "tcp://10.133.157.137:6379/0?timeout=60s&maxidle=10",
 		"Mysql":"mysql://root:@tcp(10.133.157.137:3306)/mae",
-		"PortInfo":"0.0.0.0:9090"
+		"PortInfo":"0.0.0.0:9090",
+		"SendChannelLimit":1000,
+		"RecvChannelLimit":1000,
+		"SendTimeoutSec":10,
+		"RecvTimeoutSec":10
 	}
 }
 

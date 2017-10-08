@@ -7,13 +7,13 @@ import (
 	"fmt"
 	"time"
 
-	"net/http"
+	//"net/http"
 	"runtime"
 
 	//"gokvstore/common/goredis"
 	"gokvstore/common/libutil"
 	"gokvstore/common/logging"
-
+	"gokvstore/tcpserver"
 	//_ "github.com/go-sql-driver/mysql"
 )
 
@@ -35,6 +35,10 @@ var cfg = struct {
 		//Redis    string
 		//Mysql    string
 		PortInfo string
+		SendChannelLimit uint32
+		RecvChannelLimit uint32
+		SendTimeoutSec uint32
+		RecvTimeoutSec uint32
 	}
 }{}
 
@@ -85,11 +89,15 @@ func main() {
 	//httpclient
 	//TestHttpClient()
 
-	
 
-	go func(){
-		http.ListenAndServe(cfg.Server.PortInfo, nil)
-	}()
+
+	go tcpserver.StartTcpServer(cfg.Server.PortInfo, cfg.Server.SendChannelLimit,
+	cfg.Server.RecvChannelLimit,cfg.Server.SendTimeoutSec,
+	cfg.Server.RecvTimeoutSec)
+
+	//go func(){
+	//	http.ListenAndServe(cfg.Server.PortInfo, nil)
+	//}()
 
 	file, err := libutil.DumpPanic("gsrv")
 	if err != nil {
