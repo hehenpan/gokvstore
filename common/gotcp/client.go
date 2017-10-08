@@ -1,7 +1,7 @@
 package gotcp
 
 import (
-	"mae_proj/MAE/common/logging"
+	"gokvstore/common/logging"
 	"net"
 	"sync"
 )

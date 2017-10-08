@@ -10,7 +10,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"mae_proj/MAE/common/logging"
+	"gokvstore/common/logging"
+	//"fmt"
+	//"gokvstore/tcpserver"
+
 )
 
 // Error type
@@ -18,6 +21,11 @@ var (
 	ErrConnClosing   = errors.New("use of closed network connection")
 	ErrWriteBlocking = errors.New("write packet was blocking")
 	ErrReadBlocking  = errors.New("read packet was blocking")
+)
+
+var (
+	PackErr         = int32(-1)
+	PackNeedMore    = int32(0)
 )
 
 const defaultBufferSize = 16 * 1024
@@ -44,6 +52,7 @@ type Conn struct {
 	OutputBufferTimeout  time.Duration
 	LenBuf               [4]byte
 	LenSlice             []byte
+	RecvBuffer           []byte
 	sync.RWMutex
 }
 
@@ -76,6 +85,7 @@ func newConn(conn *net.TCPConn, srv *ConnWraper) *Conn {
 		Reader:              bufio.NewReaderSize(conn, defaultBufferSize),
 		Writer:              bufio.NewWriterSize(conn, defaultBufferSize),
 		OutputBufferTimeout: defaultOutputBufferTimeout,
+		RecvBuffer:          make([]byte,0,0),
 	}
 	c.LenSlice = c.LenBuf[:]
 	return c
@@ -119,7 +129,7 @@ func (c *Conn) Close() {
 func (c *Conn) IsClosed() bool {
 	return atomic.LoadInt32(&c.closeFlag) == 1
 }
-
+/*
 // AsyncReadPacket async reads a packet, this method will never block
 func (c *Conn) AsyncReadPacket(timeout time.Duration) (Packet, error) {
 	if c.IsClosed() {
@@ -148,9 +158,19 @@ func (c *Conn) AsyncReadPacket(timeout time.Duration) (Packet, error) {
 		}
 	}
 }
-
+*/
+// 发送报文
+func (c *Conn) WritePacket(p Packet) error{
+	if c.IsClosed()==true {
+		logging.Debug("conn already closed, drop send")
+		return nil
+	}
+	c.packetSendChan<-p
+	return nil
+}
+/*
 //同步发送，异步发送太慢
-func (c *Conn) SyncWritePacket(p Packet) error {
+func (c *Conn) syncWritePacket(p Packet) error {
 	if c.IsClosed() {
 		return ErrConnClosing
 	}
@@ -167,9 +187,10 @@ func (c *Conn) SyncWritePacket(p Packet) error {
 	}
 	return nil
 }
-
+*/
+/*
 // AsyncWritePacket async writes a packet, this method will never block
-func (c *Conn) AsyncWritePacket(p Packet, timeout time.Duration) error {
+func (c *Conn) asyncWritePacket(p Packet, timeout time.Duration) error {
 	if c.IsClosed() {
 		return ErrConnClosing
 	}
@@ -211,7 +232,7 @@ func (c *Conn) AsyncWritePacket(p Packet, timeout time.Duration) error {
 			}
 		}
 	*/
-}
+//}
 
 // Do it
 func (c *Conn) Do() {
@@ -222,8 +243,9 @@ func (c *Conn) Do() {
 	go c.handleLoop()
 	go c.readStickPackLoop()
 	//go c.readLoop()
-	go c.writeStickPacketLoop()
-	go c.heartbeatLoop()
+	//go c.writeStickPacketLoop()
+	//go c.heartbeatLoop()
+	go c.writeLoop()
 }
 
 func (c *Conn) readStickPackLoop() {
@@ -236,7 +258,7 @@ func (c *Conn) readStickPackLoop() {
 
 	//reader := bufio.NewReader(c.conn)
 
-	//buffer := make([]byte, 1024)
+
 	for {
 
 		select {
@@ -248,52 +270,80 @@ func (c *Conn) readStickPackLoop() {
 
 		default:
 		}
-		c.conn.SetReadDeadline(time.Now().Add(time.Second * 180))
+		c.conn.SetReadDeadline(time.Now().Add(time.Second * 20))
 
-		err := c.srv.protocol.Unpack(c, c.packetReceiveChan)
+		//err := c.srv.protocol.Unpack(c, c.packetReceiveChan)
 
-		if e, ok := err.(net.Error); ok && e.Timeout() {
+		//if e, ok := err.(net.Error); ok && e.Timeout() {
 			//l4g.Info("con read found a timeout error, i can do")
 
-			continue
+		//	continue
 			// This was a timeout
-		}
-		if err != nil {
-			if err == io.EOF {
-				logging.Info("close by peer")
-				return
-			}
-			logging.Info("con read found a error: %v", err)
-			return
-		}
+		//}
+		//if err != nil {
+		//	if err == io.EOF {
+		//		logging.Info("close by peer")
+		//		return
+		//	}
+		//	logging.Info("con read found a error: %v", err)
+		//	return
+		//}
 
-		/*
-			n, err := reader.Read(buffer)
+
+			buffer := make([]byte, 1024*2)
+			readlen, err := c.Reader.Read(buffer)
 			if e, ok := err.(net.Error); ok && e.Timeout() {
-				//l4g.Info("con read found a timeout error, i can do")
 
+				logging.Debug("read timeout")
 				continue
 				// This was a timeout
 			}
 			if err != nil {
 				if err == io.EOF {
-					logging.Info("close by peer")
+					logging.Debug("close by peer")
 					return
 				}
-				logging.Info("con read found a error: %v", err)
+				logging.Info("conn read found a error: %s", err.Error())
 				return
 			}
 
-			if n > 0 {
-				//fmt.Println("n is ========================================", n)
-				//unCompleteBuffer = Unpack(append(unCompleteBuffer, buffer[:n]...), c.packetReceiveChan)
-
-				c.srv.protocol.Unpack2(c, buffer[:n], c.packetReceiveChan)
+			if readlen > 0 {
+				logging.Debug("readlen is %d, data:%s", readlen, buffer[0:readlen])
+				c.RecvBuffer=append(c.RecvBuffer, buffer[0:readlen] ...)
+				logging.Debug("recvbuffer:%v",c.RecvBuffer)
 			}
-		*/
+			for true{
+				logging.Debug("ready to parse packet")
+				pack, result:=c.srv.protocol.ParsePacket(c.RecvBuffer)
+				if result==-1 {
+					logging.Error("invalid data, ready to active close socket")
+					return
+				}
+				if result==0 {
+					logging.Debug("buffer size:%d package need more, continue read",
+							len(c.RecvBuffer))
+					break
+				}
+				if result>0 {
+					logging.Debug("fetch one packege, len:%d c.recvbuffer:%d",
+								result,len(c.RecvBuffer))
+					// 这个地方处理一个报文
+					pack.SetConn(c)
+					c.packetReceiveChan<-pack
+					if result==int32(len(c.RecvBuffer)) {
+						c.RecvBuffer=make([]byte,0,0)   //
+						logging.Debug("no data left in buffer, continue read")
+						break
+					}
+					c.RecvBuffer=c.RecvBuffer[result:]
+					logging.Debug("buffer left size:%d",len(c.RecvBuffer))
+					continue
+				}
+			}
+
 	}
 }
-
+/*
 func (c *Conn) readLoop() {
 	c.srv.waitGroup.Add(1)
 	defer func() {
@@ -322,7 +372,7 @@ func (c *Conn) readLoop() {
 		c.packetReceiveChan <- p
 	}
 }
-
+*/
 func (c *Conn) writeLoop() {
 	c.srv.waitGroup.Add(1)
 	defer func() {
@@ -340,14 +390,16 @@ func (c *Conn) writeLoop() {
 			return
 
 		case p := <-c.packetSendChan:
-			if _, err := c.conn.Write(DoPacket(p.Serialize())); err != nil {
+			if _, err := c.conn.Write(p.Serialize()); err != nil {
 				logging.Info("con write found a error: %v", err)
 				return
+			}else{
+				logging.Debug("packetSendChan get one packet, write success")
 			}
 		}
 	}
 }
-
+/*
 func (c *Conn) writeStickPacketLoop() {
 	c.srv.waitGroup.Add(1)
 	defer func() {
@@ -394,10 +446,11 @@ func (c *Conn) writeStickPacketLoop() {
 						return
 					}
 			*/
-		}
+/*		}
 	}
 }
-
+*/
+/*
 func (c *Conn) heartbeatLoop() {
 	c.srv.waitGroup.Add(1)
 	defer func() {
@@ -429,7 +482,7 @@ func (c *Conn) heartbeatLoop() {
 		}
 	}
 }
-
+*/
 func (c *Conn) handleLoop() {
 	c.srv.waitGroup.Add(1)
 	defer func() {
@@ -447,7 +500,7 @@ func (c *Conn) handleLoop() {
 			return
 
 		case p := <-c.packetReceiveChan:
-			//logging.Debug("receive msg:%s", string(p.Serialize()))
+			logging.Debug("receive msg:%s", string(p.Serialize()))
 			if !c.srv.callback.OnMessage(c, p) {
 				return
 			}

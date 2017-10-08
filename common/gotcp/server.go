@@ -3,7 +3,7 @@ package gotcp
 //根据https://github.com/whiskerman/gotcp 修改
 
 import (
-	"mae_proj/MAE/common/logging"
+	"gokvstore/common/logging"
 	"net"
 	"sync"
 	"time"
