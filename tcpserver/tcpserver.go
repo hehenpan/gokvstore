@@ -5,8 +5,14 @@ import(
 	"net"
 	"gokvstore/common/logging"
 
-
+	_ "gokvstore/core"
 	"time"
+	_ "reflect"
+
+	"encoding/json"
+	"gokvstore/core"
+
+
 )
 
 
@@ -34,16 +40,18 @@ func (callback *ConnCallbackImp) OnConnect(conn *gotcp.Conn) bool{
 	return true
 }
 func (callback *ConnCallbackImp) OnMessage(c *gotcp.Conn, p gotcp.Packet) bool{
-	sendPack:=&PacketImp{
-		Data:       p.Serialize(),
-	}
-	c.WritePacket(sendPack)
+	//sendPack:=&PacketImp{
+	//	Data:       p.Serialize(),
+	//}
+	//c.WritePacket(sendPack)
 
 
-	go func() {
-		time.Sleep(time.Duration(time.Second)*10)
-		c.Close()
-	}()
+	//go func() {
+	//	time.Sleep(time.Duration(time.Second)*10)
+	//	c.Close()
+	//}()
+
+	processMessage(p,c)
 
 	return true
 }
@@ -51,6 +59,51 @@ func (callback *ConnCallbackImp) OnMessage(c *gotcp.Conn, p gotcp.Packet) bool{
 func (callback *ConnCallbackImp) OnClose(*gotcp.Conn){
 	
 }
+
+func processMessage(p gotcp.Packet, c *gotcp.Conn)  {
+
+	pImp,ok:= p.(*PacketImp)
+	if ok!=true{
+		logging.Error("invalid Packet type")
+		return
+	}
+	logging.Debug("get body:%s len:%d", pImp.GetBody(), len(pImp.GetBody()))
+	msg:=pImp.GetBody()
+	cmdCommon:=&core.CmdCommonReq{}
+	err:=json.Unmarshal(msg, cmdCommon)
+	if err!=nil {
+		logging.Error("invalid msg,err:%s %s",err.Error(), msg)
+		return
+	}
+	//logging.Debug("cmdcommon:%s", cmdCommon)
+	//logging.Debug("info:%s",cmdCommon.Info)
+	if cmdCommon.Cmd==core.CmdTypeGet{
+		reply, err:=core.ProcessCmdGet(cmdCommon)
+		if err!=nil {
+			logging.Error("ProcessCmdGet failed, cmd:%s",pImp.GetBody())
+			return
+		}
+
+		protocolImp:=&ProtocolImp{}
+		pack,err:=protocolImp.ProducePacket(reply)
+		if err!=nil{
+			logging.Error("ProducePacket failed, err:%s",err.Error())
+			return
+		}
+		
+		c.WritePacket(pack)
+		return
+
+	}
+	if cmdCommon.Cmd==core.CmdTypeSet{
+
+		return
+	}
+
+	logging.Debug("invalid cmdtype:%s",cmdCommon.Cmd)
+
+}
+
 
 // 需要实现gotcp.Packet接口
 type PacketImp struct{
@@ -69,6 +122,11 @@ func (p *PacketImp)GetConn() *gotcp.Conn{
 	return p.conn
 }
 
+func (p *PacketImp)GetBody() []byte{
+	return p.Data[4:]
+}
+
+
 
 //type Packet interface {
 //	Serialize() []byte
@@ -76,10 +134,21 @@ func (p *PacketImp)GetConn() *gotcp.Conn{
 
 // 需要实现gotcp.Protocol接口
 type ProtocolImp struct{
-	
+
+}
+
+func (p *ProtocolImp)ProducePacket(bufferSend []byte) (gotcp.Packet, error){
+	packetImp:=&PacketImp{
+		Data:       gotcp.UInt32ToBytesEndian(uint32( len(bufferSend))+4),
+	}
+	packetImp.Data=append(packetImp.Data, bufferSend...)
+	return packetImp,nil
+
+	//buffer:=gotcp.UInt32ToBytes(len(bufferSend))
 }
 
 func (p *ProtocolImp)ParsePacket(bufferRecieved []byte) (gotcp.Packet, int32){
+	/*
 	if len(bufferRecieved) < 7 {
 		return nil,gotcp.PackNeedMore
 	}
@@ -87,22 +156,48 @@ func (p *ProtocolImp)ParsePacket(bufferRecieved []byte) (gotcp.Packet, int32){
 		Data:       bufferRecieved[0:7],
 	}
 	return pack, int32(len(pack.Data))
+
+	*/
+	if len(bufferRecieved)<=4{
+
+		return nil, gotcp.PackNeedMore
+	}
+	headbytes:=bufferRecieved[0:4]
+
+	//logging.Debug("%d %d  %d  %d",headbytes[0],headbytes[1],headbytes[2],headbytes[3])
+
+	length:=gotcp.BytesToUInt32BigEndian(headbytes)
+	//logging.Debug("pack len:%d",length)
+	if length>uint32( len(bufferRecieved) ) {
+		return nil,gotcp.PackNeedMore
+	}
+	pack:=&PacketImp{
+		Data:       bufferRecieved[0:length],
+	}
+	return pack, int32(len(pack.Data))
+
 }
+
 
 func (p *ProtocolImp)ReadPacket(conn *net.TCPConn) (gotcp.Packet, error){
-	buffer:=make([]byte, 0, 1000)
-	readlen, err:=conn.Read(buffer)
-	if err!=nil {
-		return nil,err
-	}
-	logging.Debug("readlen:%d",readlen)
-	pack:=PacketImp{
-		Data:    buffer,
-	}
+	//buffer:=make([]byte, 0, 1000)
+	//readlen, err:=conn.Read(buffer)
+	//if err!=nil {
+	//	return nil,err
+	//}
+	//logging.Debug("readlen:%d",readlen)
+	//pack:=PacketImp{
+	//	Data:    buffer,
+	//}
 	//pack.Data=append(pack.Data, buffer)
 
-	return &pack,nil
+	//return &pack,nil
+	return nil,nil
 }
+
+//func (p *ProtocolImp)ParseMessage(pack gotcp.Packet) string{
+//	return string( pack.Serialize()[4:])
+//}
 
 func (p *ProtocolImp)Unpack(c *gotcp.Conn, readerChannel chan gotcp.Packet) error{
 	logging.Debug("unpack called")
@@ -138,7 +233,7 @@ func StartTcpServer(PortInfo string, SendChanLimit uint32, RecvChanLimit uint32,
 	}
 	cbk:=&ConnCallbackImp{}
 	protoc:=&ProtocolImp{}
-	logging.Debug("cfg:%v",cfg)
+	//logging.Debug("cfg:%v",cfg)
 	svr:=gotcp.NewServer(cfg,cbk,protoc,100,50)
 	///netListener,err:=net.TCPListener{}("tcp", PortInfo)
 	tcpaddr,err:=net.ResolveTCPAddr("tcp",PortInfo)

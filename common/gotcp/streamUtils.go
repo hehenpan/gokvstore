@@ -169,3 +169,25 @@ func BytesToInt(b []byte) int32 {
 
 	return int32(x)
 }
+
+
+//字节转换成整形
+func BytesToUInt32BigEndian(b []byte) uint32 {
+	bytesBuffer := bytes.NewBuffer(b)
+
+	var x uint32
+	binary.Read(bytesBuffer, binary.BigEndian, &x)
+
+	return uint32(x)
+}
+
+func UInt32ToBytesEndian(n uint32) []byte {
+	x := uint32(n)
+
+	bytesBuffer := bytes.NewBuffer([]byte{})
+	binary.Write(bytesBuffer, binary.BigEndian, x)
+	return bytesBuffer.Bytes()
+}
+
+
+

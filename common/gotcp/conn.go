@@ -308,35 +308,35 @@ func (c *Conn) readStickPackLoop() {
 			}
 
 			if readlen > 0 {
-				logging.Debug("readlen is %d, data:%s", readlen, buffer[0:readlen])
+				//logging.Debug("readlen is %d, data:%s", readlen, buffer[0:readlen])
 				c.RecvBuffer=append(c.RecvBuffer, buffer[0:readlen] ...)
-				logging.Debug("recvbuffer:%v",c.RecvBuffer)
+				//logging.Debug("recvbuffer:%v",c.RecvBuffer)
 			}
 			for true{
-				logging.Debug("ready to parse packet")
+				//logging.Debug("ready to parse packet")
 				pack, result:=c.srv.protocol.ParsePacket(c.RecvBuffer)
 				if result==-1 {
 					logging.Error("invalid data, ready to active close socket")
 					return
 				}
 				if result==0 {
-					logging.Debug("buffer size:%d package need more, continue read",
-							len(c.RecvBuffer))
+					//logging.Debug("buffer size:%d package need more, continue read",
+					//		len(c.RecvBuffer))
 					break
 				}
 				if result>0 {
-					logging.Debug("fetch one packege, len:%d c.recvbuffer:%d",
-								result,len(c.RecvBuffer))
+					//logging.Debug("fetch one packege, len:%d c.recvbuffer:%d",
+					//			result,len(c.RecvBuffer))
 					// 这个地方处理一个报文
 					pack.SetConn(c)
 					c.packetReceiveChan<-pack
 					if result==int32(len(c.RecvBuffer)) {
 						c.RecvBuffer=make([]byte,0,0)   //
-						logging.Debug("no data left in buffer, continue read")
+						//logging.Debug("no data left in buffer, continue read")
 						break
 					}
 					c.RecvBuffer=c.RecvBuffer[result:]
-					logging.Debug("buffer left size:%d",len(c.RecvBuffer))
+					//logging.Debug("buffer left size:%d",len(c.RecvBuffer))
 					continue
 				}
 			}
@@ -390,11 +390,16 @@ func (c *Conn) writeLoop() {
 			return
 
 		case p := <-c.packetSendChan:
+			if c.IsClosed()==true {
+				logging.Debug("socket already closed, drop send in writeLoop")
+			}
 			if _, err := c.conn.Write(p.Serialize()); err != nil {
 				logging.Info("con write found a error: %v", err)
 				return
 			}else{
-				logging.Debug("packetSendChan get one packet, write success")
+				c.Writer.Flush()
+				//logging.Debug("packetSendChan get one packet, write success")
+
 			}
 		}
 	}
@@ -500,7 +505,7 @@ func (c *Conn) handleLoop() {
 			return
 
 		case p := <-c.packetReceiveChan:
-			logging.Debug("receive msg:%s", string(p.Serialize()))
+			//logging.Debug("receive msg:%s", string(p.Serialize()))
 			if !c.srv.callback.OnMessage(c, p) {
 				return
 			}

@@ -14,6 +14,7 @@ import (
 	"gokvstore/common/libutil"
 	"gokvstore/common/logging"
 	"gokvstore/tcpserver"
+	"gokvstore/core"
 	//_ "github.com/go-sql-driver/mysql"
 )
 
@@ -89,7 +90,9 @@ func main() {
 	//httpclient
 	//TestHttpClient()
 
+	GeneralTest()
 
+	core.CoreMemMap=core.NewCoreMem()
 
 	go tcpserver.StartTcpServer(cfg.Server.PortInfo, cfg.Server.SendChannelLimit,
 	cfg.Server.RecvChannelLimit,cfg.Server.SendTimeoutSec,
