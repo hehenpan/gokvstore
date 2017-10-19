@@ -15,7 +15,7 @@ import(
 
 )
 
-
+var PACK_HEAD_LEN=uint32(8)
 
 // 需要实现gotcp.ConnCallback接口
 type ConnCallbackImp struct {
@@ -30,7 +30,7 @@ type ConnCallbackImp struct {
 	// OnClose is called when the connection closed
 	//OnClose(*Conn)
 	//a
-	a string
+	//a string
 }
 
 func (callback *ConnCallbackImp) OnConnect(conn *gotcp.Conn) bool{
@@ -67,40 +67,99 @@ func processMessage(p gotcp.Packet, c *gotcp.Conn)  {
 		logging.Error("invalid Packet type")
 		return
 	}
-	logging.Debug("get body:%s len:%d", pImp.GetBody(), len(pImp.GetBody()))
-	msg:=pImp.GetBody()
-	cmdCommon:=&core.CmdCommonReq{}
-	err:=json.Unmarshal(msg, cmdCommon)
-	if err!=nil {
-		logging.Error("invalid msg,err:%s %s",err.Error(), msg)
-		return
-	}
-	//logging.Debug("cmdcommon:%s", cmdCommon)
-	//logging.Debug("info:%s",cmdCommon.Info)
-	if cmdCommon.Cmd==core.CmdTypeGet{
-		reply, err:=core.ProcessCmdGet(cmdCommon)
+	logging.Debug("get body:%s len:%d", pImp.CmdInfo, len(pImp.CmdInfo))
+	switch pImp.CmdType {
+	case core.CMDTYPE_GET:{
+		req:=&core.CmdGetReq{}
+		err:=json.Unmarshal(pImp.CmdInfo, req)
+		//logging.Debug("CmdGetReq: %#v ",req)
 		if err!=nil {
-			logging.Error("ProcessCmdGet failed, cmd:%s",pImp.GetBody())
+			logging.Error("cmd get info json unmarshal failed, info:%v",
+				pImp.CmdInfo)
+			c.Close()
 			return
 		}
-
+		reply, err:=core.ProcessCmdGet(req)
+		if err!=nil{
+			logging.Error("ProcessCmdGet failed, err:%s",err.Error())
+			c.Close()
+			return
+		}
+		//logging.Debug("ProcessCmdGet reply:%s",reply)
 		protocolImp:=&ProtocolImp{}
-		pack,err:=protocolImp.ProducePacket(reply)
+		pack,err:=protocolImp.ProducePacket(reply, core.CMDTYPE_GET_ACK)
 		if err!=nil{
 			logging.Error("ProducePacket failed, err:%s",err.Error())
+			c.Close()
 			return
 		}
-		
 		c.WritePacket(pack)
 		return
 
 	}
-	if cmdCommon.Cmd==core.CmdTypeSet{
+	case core.CMDTYPE_SET:{
+		req:=&core.CmdSetReq{}
+		err:=json.Unmarshal(pImp.CmdInfo, req)
+		//logging.Debug("CmdSetReq: %#v ",req)
+		if err!=nil {
+			logging.Error("cmd set info json unmarshal failed, info:%v",
+				pImp.CmdInfo)
+			c.Close()
+			return
+		}
+		reply, err:=core.ProcessCmdSet(req)
+		if err!=nil {
+			logging.Error("ProcessCmdSet failed, err:%s",err.Error())
+			c.Close()
+			return
+		}
+		//logging.Debug("ProcessCmdSet %s",reply)
+		protocolImp:=&ProtocolImp{}
+		pack,_:=protocolImp.ProducePacket(reply, core.CMDTYPE_SET_ACK)
+		c.WritePacket(pack)
 
 		return
 	}
+	default:
+		logging.Error("invalid cmdtype:%d, close socket", pImp.CmdType)
+		c.Close()
+		return
+	}
 
-	logging.Debug("invalid cmdtype:%s",cmdCommon.Cmd)
+
+	//msg:=pImp.GetBody()
+	//cmdCommon:=&core.CmdCommonReq{}
+	//err:=json.Unmarshal(msg, cmdCommon)
+	//if err!=nil {
+	//	logging.Error("invalid msg,err:%s %s",err.Error(), msg)
+	//	return
+	//}
+	//logging.Debug("cmdcommon:%s", cmdCommon)
+	//logging.Debug("info:%s",cmdCommon.Info)
+	//if cmdCommon.Cmd==core.CmdTypeGet{
+	//	reply, err:=core.ProcessCmdGet(cmdCommon)
+	//	if err!=nil {
+	//		logging.Error("ProcessCmdGet failed, cmd:%s",pImp.GetBody())
+	//		return
+	//	}
+
+		//protocolImp:=&ProtocolImp{}
+		//pack,err:=protocolImp.ProducePacket(reply)
+		//if err!=nil{
+		//	logging.Error("ProducePacket failed, err:%s",err.Error())
+		//	return
+		//}
+		
+		//c.WritePacket(pack)
+	//	return
+
+	//}
+	//if cmdCommon.Cmd==core.CmdTypeSet{
+
+	//	return
+	//}
+
+	//logging.Debug("invalid cmdtype:%s",cmdCommon.Cmd)
 
 }
 
@@ -109,6 +168,10 @@ func processMessage(p gotcp.Packet, c *gotcp.Conn)  {
 type PacketImp struct{
 	Data []byte
 	conn *gotcp.Conn
+	HeadBuffer []byte
+	TotalLen uint32
+	CmdType uint32
+	CmdInfo []byte
 }
 
 func (p *PacketImp)Serialize() []byte{
@@ -137,10 +200,12 @@ type ProtocolImp struct{
 
 }
 
-func (p *ProtocolImp)ProducePacket(bufferSend []byte) (gotcp.Packet, error){
+func (p *ProtocolImp)ProducePacket(bufferSend []byte,cmdType uint32) (gotcp.Packet, error){
 	packetImp:=&PacketImp{
-		Data:       gotcp.UInt32ToBytesEndian(uint32( len(bufferSend))+4),
+		Data:       gotcp.UInt32ToBytesEndian(uint32( len(bufferSend))+PACK_HEAD_LEN),
 	}
+	cmdTypeSlice:=gotcp.UInt32ToBytesEndian(cmdType)
+	packetImp.Data=append(packetImp.Data, cmdTypeSlice...)
 	packetImp.Data=append(packetImp.Data, bufferSend...)
 	return packetImp,nil
 
@@ -158,7 +223,7 @@ func (p *ProtocolImp)ParsePacket(bufferRecieved []byte) (gotcp.Packet, int32){
 	return pack, int32(len(pack.Data))
 
 	*/
-	if len(bufferRecieved)<=4{
+	if len(bufferRecieved)<=int(PACK_HEAD_LEN){
 
 		return nil, gotcp.PackNeedMore
 	}
@@ -171,11 +236,23 @@ func (p *ProtocolImp)ParsePacket(bufferRecieved []byte) (gotcp.Packet, int32){
 	if length>uint32( len(bufferRecieved) ) {
 		return nil,gotcp.PackNeedMore
 	}
+	cmdType:=gotcp.BytesToUInt32BigEndian(bufferRecieved[4:PACK_HEAD_LEN])
 	pack:=&PacketImp{
 		Data:       bufferRecieved[0:length],
-	}
-	return pack, int32(len(pack.Data))
+		HeadBuffer: bufferRecieved[0:PACK_HEAD_LEN],
+		TotalLen:   length,
+		CmdType:    cmdType,
+		CmdInfo:    bufferRecieved[PACK_HEAD_LEN:],
 
+	}
+	return pack, int32(length)
+
+	/*
+	HeadBuffer []byte
+	TotalLen uint32
+	CmdType uint32
+	CmdInfo []byte
+	*/
 }
 
 

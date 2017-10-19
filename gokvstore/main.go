@@ -46,6 +46,17 @@ var cfg = struct {
 
 
 func main() {
+	done := false
+
+	go func(){
+		done = true
+	}()
+
+	//fmt.Println("start!")
+	for !done {
+	}
+	fmt.Println("done!")
+
 	//配置解析
 	config := flag.String("c", "conf/config.json", "config file")
 	flag.Parse()
@@ -59,11 +70,12 @@ func main() {
 		fmt.Printf("init time rotate logger error: %s\n", err.Error())
 		return
 	}
-	if cfg.Prog.CPU == 0 {
-		runtime.GOMAXPROCS(runtime.NumCPU()) //配0就用所有核
-	} else {
-		runtime.GOMAXPROCS(cfg.Prog.CPU)
-	}
+	//if cfg.Prog.CPU == 0 {
+	//	runtime.GOMAXPROCS(runtime.NumCPU()) //配0就用所有核
+	//} else {
+	//	runtime.GOMAXPROCS(cfg.Prog.CPU)
+	//}
+	runtime.GOMAXPROCS(1)
 
 	//日志
     logging.Debug("server start")

@@ -120,6 +120,7 @@ func (c *Conn) Close() {
 	c.closeOnce.Do(func() {
 		atomic.StoreInt32(&c.closeFlag, 1)
 		close(c.closeChan)
+		close(c.packetSendChan)
 		c.conn.Close()
 		c.srv.callback.OnClose(c)
 	})
@@ -382,6 +383,9 @@ func (c *Conn) writeLoop() {
 	}()
 
 	for {
+		if c.IsClosed()==true {
+			return
+		}
 		select {
 		case <-c.srv.exitChan:
 			return
@@ -391,7 +395,8 @@ func (c *Conn) writeLoop() {
 
 		case p := <-c.packetSendChan:
 			if c.IsClosed()==true {
-				logging.Debug("socket already closed, drop send in writeLoop")
+				//logging.Debug("socket already closed, drop send in writeLoop")
+				return
 			}
 			if _, err := c.conn.Write(p.Serialize()); err != nil {
 				logging.Info("con write found a error: %v", err)
@@ -497,6 +502,9 @@ func (c *Conn) handleLoop() {
 	}()
 
 	for {
+		if c.IsClosed()==true {
+			return
+		}
 		select {
 		case <-c.srv.exitChan:
 			return
@@ -504,8 +512,11 @@ func (c *Conn) handleLoop() {
 		case <-c.closeChan:
 			return
 
-		case p := <-c.packetReceiveChan:
+		case p ,ok:= <-c.packetReceiveChan:
 			//logging.Debug("receive msg:%s", string(p.Serialize()))
+			if ok==false{
+				return
+			}
 			if !c.srv.callback.OnMessage(c, p) {
 				return
 			}
