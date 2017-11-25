@@ -9,6 +9,11 @@ import (
 	"reflect"
 	_"fmt"
 	"fmt"
+	"gokvstore/persistence"
+	"sync"
+	"runtime"
+	"gokvstore/core"
+	"os"
 )
 
 
@@ -16,7 +21,25 @@ func GeneralTest(){
 	//TestAction()
 	//Test50Shades()
 	//TestChannel()
+	//TestPersistence()
+	//TestMethod()
+	//TestInterview()
+	TestKvDb()
+
+	os.Exit(0)
 }
+
+func TestKvDb(){
+	fileinfo,_:=core.NewDbInfo("/root/winshare/winshare/sz/","dump.rdb")
+	exist:=fileinfo.IsExist()
+	logging.Debug("exist: %v",exist)
+
+	fileinfo.LoadPrefix()
+	fileinfo.LoadDbs()
+
+}
+
+
 
 func TestChannel(){
 	//ch1:=make(chan int, 100)
@@ -193,14 +216,205 @@ func (p *field) print() {
 
 
 
+func TestPersistence(){
+	persistence.NewJournalDb("abc","def")
+}
+
+
+type Object struct{
+	Item int
+}
+
+func (o *Object) add(a int){
+	o.Item=o.Item+a
+}
+
+func TestMethod(){
+
+	var o Object
+	o.Item=0
+	o.add(1)
+	logging.Debug("item %d",o.Item)
+
+	var i1 interface{}
+	var i2 interface{}
+	logging.Debug("%v",i1==i2)
+	i1=&Object{
+		Item:   10,
+	}
+	logging.Debug("%v",i1==i2)
+	i2=&Object{
+		Item:   10,
+	}
+	logging.Debug("%v",i1==i2)
+
+	logging.Debug("%T",i1)
+
+}
+
+/*----------------------------------------------------*/
+func TestInterview(){
+	logging.Debug("TestInterview")
+	//defer_call()
+	//Gofunc()
+	//t := Teacher{}
+	//logging.Debug("t: %#v, %T  %p",t,t,&t)
+	//t.ShowA()
+	//ChanPanic()
+
+	//a := 1
+	//b := 2
+	//defer calc("1", a, calc("10", a, b))
+	//a = 0
+	//defer calc("2", a, calc("20", a, b))
+	//b = 1
+
+	//s := make([]int, 5)
+	//s = append(s, 1, 2, 3)
+	//fmt.Println(s)
+	//ch := make(chan interface{})
+	//ch <- 10
+	//ch <- 10
+	//logging.Debug("chan finish")
+
+	var peo People1 = &Stduent{}
+	think := "bitch"
+	fmt.Println(peo.Speak(think))
+
+	//peoType:=reflect.TypeOf(peo)
+
+	//logging.Debug("%v  %v",peoType,  peo.(type)  )
+	//peoType==Type(People1)
+
+
+	switch peo.(type) {
+	//case int:
+	//	fmt.Println("int")
+	//case string:
+	//	fmt.Println("string")
+	//case People1:
+	//	fmt.Println("People1")
+	case interface{}:
+		fmt.Println("interface")
+	default:
+		fmt.Println("unknown")
+	}
+
+
+	//var x *int = nil
+	//Foo(x)
+
+	fmt.Println(x,y,z,k,p)
+
+}
+const (
+	x = iota
+	y
+	z = "zz"
+	k
+	p = iota
+)
+
+func Foo(x interface{}) {
+	if x == nil {
+		fmt.Println("empty interface")
+		return
+	}
+	fmt.Println("non-empty interface")
+}
+
+
+func DeferFunc1(i int) (t int) {
+	t = i
+	defer func() {
+		t += 3
+	}()
+	return 100
+}
+
+
+func defer_call() {
+	defer func() { logging.Debug("打印前") }()
+	defer func() { logging.Debug("打印中") }()
+	defer func() { logging.Debug("打印后") }()
+
+	//panic("触发异常")
+}
+
+func Gofunc(){
+	runtime.GOMAXPROCS(1)
+	wg := sync.WaitGroup{}
+	wg.Add(20)
+	for i := 0; i < 10; i++ {
+		go func() {
+			fmt.Println("ai: ", i)
+			wg.Done()
+		}()
+	}
+	for i := 0; i < 10; i++ {
+		go func(i int) {
+			fmt.Println("bi: ", i)
+			wg.Done()
+		}(i)
+	}
+	wg.Wait()
+}
+
+type People struct{}
+
+func (p *People) ShowA() {
+	logging.Debug("showA, %#v  %T    %p",p,p,p)
+	p.ShowB()
+}
+func (p *People) ShowB() {
+	logging.Debug("showB, %#v  %T  %p",p,p,p)
+}
+
+type Teacher struct {
+	People
+}
+
+func (t *Teacher) ShowB() {
+	logging.Debug("teacher showB")
+}
 
 
 
+func ChanPanic(){
+	runtime.GOMAXPROCS(1)
+	int_chan := make(chan int, 1)
+	string_chan := make(chan string, 1)
+	int_chan <- 1
+	string_chan <- "hello"
+	select {
+	case value := <-int_chan:
+		fmt.Println(value)
+	case value := <-string_chan:
+		panic(value)
+	}
+	logging.Debug("ChanPanic finish")
+}
 
+func calc(index string, a, b int) int {
+	ret := a + b
+	fmt.Println(index, a, b, ret)
+	return ret
+}
 
+type People1 interface {
+	Speak(string) string
+}
 
+type Stduent struct{}
 
-
+func (stu *Stduent) Speak(think string) (talk string) {
+	if think == "bitch" {
+		talk = "You are a good boy"
+	} else {
+		talk = "hi"
+	}
+	return
+}
 
 
 

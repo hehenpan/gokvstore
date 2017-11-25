@@ -46,16 +46,7 @@ var cfg = struct {
 
 
 func main() {
-	done := false
 
-	go func(){
-		done = true
-	}()
-
-	//fmt.Println("start!")
-	for !done {
-	}
-	fmt.Println("done!")
 
 	//配置解析
 	config := flag.String("c", "conf/config.json", "config file")
